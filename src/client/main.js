@@ -34,11 +34,6 @@ container.appendChild(renderer.domElement);
 // --- Scene contents ---
 scene.add(createRoom());
 
-// Dev helpers for orientation (origin axes + ground grid). Remove later.
-const axes = new THREE.AxesHelper(5);
-const grid = new THREE.GridHelper(60, 60, 0x333a45, 0x222831);
-scene.add(axes, grid);
-
 // --- Resize handling: keep the room centered and unstretched ---
 function onResize() {
   const a = window.innerWidth / window.innerHeight;
