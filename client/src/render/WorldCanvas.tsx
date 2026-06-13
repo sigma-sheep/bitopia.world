@@ -1,9 +1,12 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
+import type { Entity } from "shared/types";
+import { avatarSeedToColor } from "shared/avatar";
 import { Room } from "../world/Room";
 import { buildRoom } from "./RoomRenderer";
 import { Character } from "./Character";
 import { makeIsoCamera, resizeIsoCamera } from "./isoCamera";
+import { connectRoom } from "../net/room";
 
 // Owns the three.js scene, the fixed iso camera, and the render loop. Mounts a
 // canvas into a div it controls and cleans everything up on unmount. The render
@@ -15,8 +18,8 @@ export function WorldCanvas() {
     const mount = mountRef.current;
     if (!mount) return;
 
-    const width = mount.clientWidth;
-    const height = mount.clientHeight;
+    let width = mount.clientWidth;
+    let height = mount.clientHeight;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio);
@@ -38,16 +41,28 @@ export function WorldCanvas() {
     const room = Room.grid(20, 20);
     scene.add(buildRoom(room));
 
-    // Spawn one character at a random floor position with a random color, inset
-    // from the walls (later: one per server Entity).
-    const margin = 2;
-    const spawn = {
-      x: margin + Math.random() * (room.width - 2 * margin),
-      y: margin + Math.random() * (room.height - 2 * margin),
+    // One Character per server Entity, keyed by id. The server owns identity,
+    // color (from avatarSeed) and spawn, so every client renders the same world.
+    const characters = new Map<string, Character>();
+    const addEntity = (e: Entity) => {
+      if (characters.has(e.id)) return;
+      const character = new Character(e.id, avatarSeedToColor(e.avatarSeed), e.pos);
+      character.setResolution(width, height);
+      scene.add(character.mesh);
+      characters.set(e.id, character);
     };
-    const character = new Character("self", Character.randomColor(), spawn);
-    character.setResolution(width, height);
-    scene.add(character.mesh);
+    const removeEntity = (id: string) => {
+      const character = characters.get(id);
+      if (!character) return;
+      scene.remove(character.mesh);
+      characters.delete(id);
+    };
+
+    const disconnect = connectRoom({
+      onSnapshot: (entities) => entities.forEach(addEntity),
+      onJoined: addEntity,
+      onLeft: removeEntity,
+    });
 
     let raf = 0;
     const renderLoop = () => {
@@ -57,15 +72,16 @@ export function WorldCanvas() {
     renderLoop();
 
     const onResize = () => {
-      const w = mount.clientWidth;
-      const h = mount.clientHeight;
-      renderer.setSize(w, h);
-      resizeIsoCamera(camera, w / h);
-      character.setResolution(w, h);
+      width = mount.clientWidth;
+      height = mount.clientHeight;
+      renderer.setSize(width, height);
+      resizeIsoCamera(camera, width / height);
+      characters.forEach((c) => c.setResolution(width, height));
     };
     window.addEventListener("resize", onResize);
 
     return () => {
+      disconnect();
       window.removeEventListener("resize", onResize);
       cancelAnimationFrame(raf);
       mount.removeChild(renderer.domElement);

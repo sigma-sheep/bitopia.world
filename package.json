@@ -4,12 +4,14 @@
   "type": "module",
   "workspaces": ["shared", "server", "client", "contracts"],
   "scripts": {
+    "dev": "concurrently -k -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "npm run dev -w server",
     "dev:client": "npm run dev -w client",
     "build:shared": "npm run build -w shared",
     "test": "npm run test -w shared && npm run test -w server"
   },
   "devDependencies": {
+    "concurrently": "^9.0.0",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"
   }
