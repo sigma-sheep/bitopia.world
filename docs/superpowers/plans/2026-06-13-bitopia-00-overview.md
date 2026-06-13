@@ -224,6 +224,36 @@ export const bus = new Bus();
 - **S3** finishes agent creation (Privy server wallet created, `createAgent` tx mined, ENS set, row written to `agents`) → `bus.emitT("agentCreated", { agentId })`.
 - **S4** `registerAgents` loads existing agents from the DB on boot **and** `bus.onT("agentCreated", …)` to spawn newly created agents live.
 
+### Cross-module server APIs (let S4 drive S2's world + S3's wallets)
+
+So the agent brain (S4) never edits world (S2) or chain (S3) files, those modules expose singletons:
+
+```ts
+// server/src/world/index.ts — S2 implements, assigns in registerWorld; S4 + S3 consume
+import type { Entity, Vec2, Facing, ChatMessage, TxRecord } from "shared/types";
+export interface WorldApi {
+  addEntity(e: Entity): void;                                   // + broadcast entityJoined/roomState
+  moveEntity(id: string, pos: Vec2, facing: Facing): void;      // + broadcast entityMoved
+  removeEntity(id: string): void;                               // + broadcast entityLeft
+  roomEntities(roomId: string): Entity[];
+  emitChat(msg: ChatMessage): void;                             // persist + broadcast chat (agents speak)
+  emitTx(rec: TxRecord, toRoomId?: string): void;              // broadcast a tx-feed item
+}
+export let worldApi: WorldApi; // assigned during registerWorld(io, db)
+```
+
+```ts
+// server/src/chain/wallets.ts — S3 implements; S4 consumes for autonomous tips
+export interface AgentWalletOps {
+  createAgentWallet(): Promise<{ walletId: string; address: `0x${string}` }>;
+  sendErc20(walletId: string, token: `0x${string}`, to: `0x${string}`, amount: bigint): Promise<string>; // tx hash
+  fundEth(address: `0x${string}`): Promise<void>; // gas for the agent wallet
+}
+export let agentWalletOps: AgentWalletOps; // assigned during registerChain(io, app, db)
+```
+
+Both are `export let` singletons assigned inside the owning module's `register*` function, so consumers import the binding and use it after boot. Agents are `Entity` with `type: "agent"`.
+
 ### `server/db/schema.sql`
 
 ```sql
