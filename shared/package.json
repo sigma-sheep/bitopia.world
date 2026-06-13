@@ -1,0 +1,10 @@
+{
+  "name": "shared",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "types.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  }
+}
