@@ -263,12 +263,17 @@ export function openDb(path: string): Database.Database {
 Run: `npm test -w server`
 Expected: PASS.
 
+- [ ] **Step 8b: Create `server/src/socketTypes.ts`** — copy the `declare module "socket.io"` block verbatim from the overview "Authentication seam".
+
+- [ ] **Step 8c: Create `server/src/bus.ts`** — copy the typed event-bus block verbatim from the overview "Server-internal event bus seam".
+
 - [ ] **Step 9: Create `server/src/index.ts` (composition root with empty stubs)**
 
 ```ts
 import express from "express";
 import { createServer } from "node:http";
 import { Server } from "socket.io";
+import "./socketTypes.js"; // augments socket.data.user typing
 import { config } from "./config.js";
 import { openDb } from "./db/db.js";
 
@@ -373,9 +378,11 @@ import type { ClientToServer, ServerToClient } from "shared/protocol";
 
 export type AppSocket = Socket<ServerToClient, ClientToServer>;
 
-export function connectSocket(): AppSocket {
+// privyToken is sent via the handshake (see overview "Authentication seam").
+// Optional so S2 can run in dev mode before S3's auth middleware exists.
+export function connectSocket(privyToken?: string): AppSocket {
   const url = import.meta.env.VITE_SOCKET_URL ?? "http://localhost:8787";
-  return io(url, { autoConnect: true });
+  return io(url, { auth: privyToken ? { privyToken } : {} });
 }
 ```
 

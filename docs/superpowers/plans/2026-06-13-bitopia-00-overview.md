@@ -109,6 +109,15 @@ export interface Room {
   height: number;
 }
 
+// Identity attached to a socket by the S3 auth middleware (see Authentication seam)
+export interface SocketUser {
+  id: string;
+  address: string;
+  ensName?: string;
+  avatarSeed: string;
+  roomId: string;
+}
+
 export interface ChatMessage {
   id: string;
   roomId: string;
@@ -147,8 +156,9 @@ export interface TxRecord {
 import type { Entity, Room, ChatMessage, Vec2, Facing, TxRecord } from "./types";
 
 // Client → Server
+// NOTE: authentication is NOT an event — the client connects with
+// `io(url, { auth: { privyToken } })`. See "Authentication seam" below.
 export interface ClientToServer {
-  join: (p: { privyToken: string }) => void;          // authenticate + load self
   enterRoom: (p: { roomId: string }) => void;
   move: (p: { pos: Vec2; facing: Facing }) => void;
   chat: (p: { text: string }) => void;
@@ -167,11 +177,52 @@ export interface ServerToClient {
 }
 
 export const SOCKET_EVENTS = [
-  "join", "enterRoom", "move", "chat",
+  "enterRoom", "move", "chat",
   "welcome", "roomState", "entityJoined", "entityMoved",
   "entityLeft", "chat", "roomList", "tx",
 ] as const;
 ```
+
+### Authentication seam (decouples S3 auth from S2 world)
+
+Authentication happens in a **socket.io middleware**, not an event — this is the boundary between S3 (auth) and S2 (world):
+
+- **Client** connects with `io(url, { auth: { privyToken } })`.
+- **S3** installs `io.use(authMiddleware)` in `registerAuth`. The middleware verifies the Privy token, creates-or-loads the user + their room, drips gas ETH, ensures the user + room ENS subnames exist, and sets:
+  ```ts
+  socket.data.user = { id, address, ensName, avatarSeed, roomId } // type SocketUser
+  ```
+- **S2** `registerWorld` reads `socket.data.user` on the `connection` event to spawn the entity and serve `welcome`. If `socket.data.user` is absent (S3 not merged yet / dev mode), it falls back to a dev identity so S2 is testable alone.
+
+`shared/types.ts` includes the shared shape:
+```ts
+export interface SocketUser {
+  id: string; address: string; ensName?: string; avatarSeed: string; roomId: string;
+}
+```
+And `server/src/socketTypes.ts` (created in S0) augments socket.io's `Socket["data"]`:
+```ts
+import "socket.io";
+import type { SocketUser } from "shared/types";
+declare module "socket.io" {
+  interface SocketData { user?: SocketUser; }
+}
+```
+
+### Server-internal event bus seam (decouples S3 create-agent from S4 brain)
+
+`server/src/bus.ts` (created in S0) is a typed in-process EventEmitter:
+```ts
+import { EventEmitter } from "node:events";
+export interface BusEvents { agentCreated: { agentId: string }; }
+class Bus extends EventEmitter {
+  emitT<K extends keyof BusEvents>(k: K, p: BusEvents[K]) { return this.emit(k, p); }
+  onT<K extends keyof BusEvents>(k: K, fn: (p: BusEvents[K]) => void) { this.on(k, fn); }
+}
+export const bus = new Bus();
+```
+- **S3** finishes agent creation (Privy server wallet created, `createAgent` tx mined, ENS set, row written to `agents`) → `bus.emitT("agentCreated", { agentId })`.
+- **S4** `registerAgents` loads existing agents from the DB on boot **and** `bus.onT("agentCreated", …)` to spawn newly created agents live.
 
 ### `server/db/schema.sql`
 
