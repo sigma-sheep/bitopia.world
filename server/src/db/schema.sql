@@ -1,7 +1,8 @@
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,            -- privy user id
   address TEXT NOT NULL,          -- embedded wallet address
-  ens_name TEXT,
+  username TEXT UNIQUE,           -- chosen handle (the ENS label); null until claimed
+  ens_name TEXT,                  -- <username>.bitopiaworld.eth once issued
   avatar_seed TEXT NOT NULL,
   room_id TEXT NOT NULL,
   created_at INTEGER NOT NULL

@@ -2,6 +2,8 @@ import http from "node:http";
 import express from "express";
 import { Server } from "socket.io";
 import { config } from "./config";
+import { openDb } from "./db/db";
+import { registerAuth } from "./auth/index";
 import { registerRoom } from "./room/handlers";
 
 const app = express();
@@ -11,6 +13,11 @@ const server = http.createServer(app);
 // origin:true reflects the request origin — fine for local dev across the Vite port.
 const io = new Server(server, { cors: { origin: true } });
 
+const db = openDb();
+
+// Auth first: installs the handshake middleware so socket.data.user is set before
+// the room's connection handler runs, and mounts the /api identity endpoints.
+registerAuth(io, app, db);
 registerRoom(io);
 
 server.listen(config.port, () => {

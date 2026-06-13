@@ -10,8 +10,8 @@ export interface RoomCallbacks {
   onLeft: (id: string) => void;
 }
 
-export function connectRoom(cb: RoomCallbacks): () => void {
-  const socket = connectSocket(); // dev mode: no Privy token yet
+export function connectRoom(cb: RoomCallbacks, privyToken?: string): () => void {
+  const socket = connectSocket(privyToken); // token authenticates the handshake
   socket.on("roomState", ({ entities }) => cb.onSnapshot(entities));
   socket.on("entityJoined", ({ entity }) => cb.onJoined(entity));
   socket.on("entityLeft", ({ id }) => cb.onLeft(id));

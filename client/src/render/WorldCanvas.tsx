@@ -11,7 +11,7 @@ import { connectRoom } from "../net/room";
 // Owns the three.js scene, the fixed iso camera, and the render loop. Mounts a
 // canvas into a div it controls and cleans everything up on unmount. The render
 // loop runs every frame so moving entities can be added later without rework.
-export function WorldCanvas() {
+export function WorldCanvas({ token }: { token?: string }) {
   const mountRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -58,11 +58,14 @@ export function WorldCanvas() {
       characters.delete(id);
     };
 
-    const disconnect = connectRoom({
-      onSnapshot: (entities) => entities.forEach(addEntity),
-      onJoined: addEntity,
-      onLeft: removeEntity,
-    });
+    const disconnect = connectRoom(
+      {
+        onSnapshot: (entities) => entities.forEach(addEntity),
+        onJoined: addEntity,
+        onLeft: removeEntity,
+      },
+      token
+    );
 
     let raf = 0;
     const renderLoop = () => {
@@ -87,7 +90,7 @@ export function WorldCanvas() {
       mount.removeChild(renderer.domElement);
       renderer.dispose();
     };
-  }, []);
+  }, [token]);
 
   return <div ref={mountRef} style={{ width: "100vw", height: "100vh" }} />;
 }

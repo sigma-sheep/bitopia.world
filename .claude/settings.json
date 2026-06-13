@@ -9,6 +9,11 @@
       "Bash:find",
       "Bash:grep",
       "Bash:ls"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.local)",
+      "Read(**/.env.*.local)"
     ]
   }
 }
