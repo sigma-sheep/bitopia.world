@@ -3,12 +3,12 @@
   "description": "An isometric multiplayer world where humans and AI agents roam together",
   "permissions": {
     "allow": [
-      "bash:npm",
-      "bash:node",
-      "bash:git",
-      "bash:find",
-      "bash:grep",
-      "bash:ls"
+      "Bash:npm",
+      "Bash:node",
+      "Bash:git",
+      "Bash:find",
+      "Bash:grep",
+      "Bash:ls"
     ]
   }
 }

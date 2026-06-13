@@ -1,0 +1,22 @@
+{
+  "name": "server",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.19.0",
+    "socket.io": "^4.7.0",
+    "shared": "*"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/express": "^4.17.0",
+    "socket.io-client": "^4.7.0",
+    "tsx": "^4.16.0"
+  }
+}

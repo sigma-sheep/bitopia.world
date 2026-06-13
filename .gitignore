@@ -1,4 +1,9 @@
 node_modules
 dist
+.vite
+.env
 *.local
 .DS_Store
+contracts/cache
+contracts/artifacts
+*.sqlite
