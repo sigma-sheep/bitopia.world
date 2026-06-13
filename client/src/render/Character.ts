@@ -19,7 +19,9 @@ export class Character {
   static readonly SIZE = { w: 1, h: 3, d: 1 } as const;
 
   static randomColor(): string {
-    return PALETTE[Math.floor(Math.random() * PALETTE.length)];
+    const color = PALETTE[Math.floor(Math.random() * PALETTE.length)];
+    console.log("color", color);
+    return color;
   }
 
   readonly mesh: THREE.Mesh;
