@@ -54,7 +54,7 @@ export interface SubnameResult {
   txHash: string;
 }
 
-// Issues `<label>.bitopiaworld.eth` on Sepolia: mint the wrapped subname owned by
+// Issues `<label>.bitopiaworld.eth` on Ethereum mainnet: mint the wrapped subname owned by
 // `owner`, point its addr record at `owner`, and set an avatar text record.
 // Throws if ENS isn't configured or the on-chain mint reverts (e.g. name taken).
 export async function ensureUserSubname(

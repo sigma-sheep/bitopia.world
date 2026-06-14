@@ -7,3 +7,4 @@ dist
 contracts/cache
 contracts/artifacts
 *.sqlite
+*.sqlite-*
