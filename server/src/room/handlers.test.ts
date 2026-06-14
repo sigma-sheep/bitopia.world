@@ -101,3 +101,37 @@ describe("room presence", () => {
     expect(evt.id).toBe(bWelcome.selfId);
   });
 });
+
+describe("click-to-move", () => {
+  it("broadcasts a clamped move to the whole room, sender included", async () => {
+    const a = connect();
+    const aWelcome = await once(a, "welcome");
+
+    // io.to (not socket.to) → the mover receives its own echo, which is what
+    // keeps the round-trip authority model in lockstep across clients.
+    const moved = once(a, "entityMoved");
+    a.emit("move", { pos: { x: 999, y: 10 }, facing: "E" });
+    const evt = await moved;
+
+    expect(evt.id).toBe(aWelcome.selfId);
+    expect(evt.pos).toEqual({ x: 18, y: 10 }); // x clamped to size - MARGIN
+    expect(evt.facing).toBe("E");
+  });
+
+  it("relays one player's move to the other player", async () => {
+    const a = connect();
+    await once(a, "roomState");
+
+    const joined = once(a, "entityJoined");
+    const b = connect();
+    const bWelcome = await once(b, "welcome");
+    await joined;
+
+    const aSawMove = once(a, "entityMoved");
+    b.emit("move", { pos: { x: 4, y: 5 }, facing: "N" });
+    const evt = await aSawMove;
+
+    expect(evt.id).toBe(bWelcome.selfId);
+    expect(evt.pos).toEqual({ x: 4, y: 5 });
+  });
+});
