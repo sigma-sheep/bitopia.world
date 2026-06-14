@@ -16,4 +16,8 @@ export const config = {
   anthropicKey: process.env.ANTHROPIC_API_KEY ?? "",
   ensParentName: process.env.ENS_PARENT_NAME ?? "bitopiaworld.eth",
   ensParentOwnerKey: process.env.ENS_PARENT_OWNER_KEY ?? "",
+  blinkMerchantId: process.env.BLINK_MERCHANT_ID ?? "",
+  // PEM private key for signing Blink payloads. dotenv keeps literal "\n" when
+  // the value is double-quoted, so normalize them back to real newlines here.
+  blinkSignerKey: (process.env.BLINK_SIGNER_KEY ?? "").replace(/\\n/g, "\n"),
 };

@@ -1,7 +1,7 @@
 // Thin client for the server's identity endpoints. The caller supplies the Privy
 // access token (from usePrivy().getAccessToken()).
 
-const API = (import.meta.env as Record<string, string>).VITE_SOCKET_URL ?? "http://localhost:8787";
+export const API = (import.meta.env as Record<string, string>).VITE_SOCKET_URL ?? "http://localhost:8787";
 
 export interface Me {
   id: string;

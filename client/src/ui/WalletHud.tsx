@@ -1,9 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
-import { fetchBalances, type Balances } from "../auth/api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { usePrivy } from "@privy-io/react-auth";
+import { useBlinkDeposit } from "@swype-org/deposit/react";
+import type { SignerRequest, SignerResponse } from "@swype-org/deposit";
+import { fetchBalances, API, type Balances } from "../auth/api";
+
+// Ethereum mainnet — this app funds USDC there (matches the server signer).
+const CHAIN_ID = 1;
+const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+// Optional perf hint that warms Blink's hosted flow; never trusted for auth.
+const MERCHANT_ID =
+  (import.meta.env as Record<string, string>).VITE_BLINK_MERCHANT_ID || undefined;
 
 // Persistent in-world wallet surface: a small chip showing the player's USDC,
-// which expands into a panel with their address, balances, and a (stubbed)
-// Blink "Add funds" button. Balances refresh on open and on a slow poll.
+// which expands into a panel with their address, balances, and a Blink
+// "Add funds" deposit button. Balances refresh on open and on a slow poll.
 export function WalletHud({
   token,
   address,
@@ -16,6 +26,7 @@ export function WalletHud({
   const [open, setOpen] = useState(false);
   const [bal, setBal] = useState<Balances | null>(null);
   const [copied, setCopied] = useState(false);
+  const [amount, setAmount] = useState("10");
 
   const load = useCallback(async () => {
     try {
@@ -24,6 +35,48 @@ export function WalletHud({
       setBal({ usdc: "—", eth: "—" });
     }
   }, [token]);
+
+  // Blink deposit. useBlinkDeposit freezes its config on first render, so the
+  // signer can't close over the `token` prop (it expires). Instead it reads the
+  // latest getAccessToken via a ref and fetches a fresh token at call time.
+  const { getAccessToken } = usePrivy();
+  const getTokenRef = useRef(getAccessToken);
+  getTokenRef.current = getAccessToken;
+
+  const { status, displayMessage, requestDeposit } = useBlinkDeposit({
+    merchantId: MERCHANT_ID,
+    enableFullWidget: false, // one-tap; no Deposit Options entry screen
+    signer: async (data: SignerRequest): Promise<SignerResponse> => {
+      const t = await getTokenRef.current();
+      const res = await fetch(`${API}/api/sign-payment`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${t}`, "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `signer failed: ${res.status}`);
+      }
+      return res.json();
+    },
+  });
+
+  const depositing = status === "signer-loading" || status === "iframe-active";
+
+  const addFunds = async () => {
+    const amt = Number(amount);
+    try {
+      await requestDeposit({
+        amount: Number.isFinite(amt) && amt > 0 ? amt : null,
+        chainId: CHAIN_ID,
+        address,
+        token: USDC,
+      });
+      await load(); // reflect the new balance once the deposit completes
+    } catch {
+      // Errors (including user-dismissed) surface via `displayMessage` below.
+    }
+  };
 
   // Load once up front (so the chip shows a balance), then poll only while the
   // panel is open to keep idle network traffic down.
@@ -69,9 +122,23 @@ export function WalletHud({
             <BalanceCell label="ETH" value={eth} />
           </div>
 
-          <button style={fundBtn} disabled title="Coming soon">
-            Add funds
+          <div style={fundRow}>
+            <span style={{ opacity: 0.6 }}>$</span>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              style={amountInput}
+              aria-label="Amount in USD"
+            />
+          </div>
+          <button style={fundBtn} onClick={addFunds} disabled={depositing}>
+            {depositing ? "Opening Blink…" : "Add funds"}
           </button>
+          {displayMessage && <div style={errLine}>{displayMessage}</div>}
         </div>
       )}
 
@@ -169,8 +236,27 @@ const balCell: React.CSSProperties = {
   background: "#0c0f14",
   border: "1px solid #2a3340",
 };
-const fundBtn: React.CSSProperties = {
+const fundRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
   marginTop: 14,
+  padding: "8px 12px",
+  borderRadius: 8,
+  background: "#0c0f14",
+  border: "1px solid #2a3340",
+};
+const amountInput: React.CSSProperties = {
+  flex: 1,
+  background: "transparent",
+  border: "none",
+  outline: "none",
+  color: "#e8eef6",
+  fontSize: 16,
+  fontWeight: 600,
+};
+const fundBtn: React.CSSProperties = {
+  marginTop: 10,
   width: "100%",
   padding: "10px 0",
   fontSize: 14,
@@ -178,6 +264,10 @@ const fundBtn: React.CSSProperties = {
   borderRadius: 8,
   background: "#3b82f6",
   color: "white",
-  cursor: "not-allowed",
-  opacity: 0.5,
+  cursor: "pointer",
+};
+const errLine: React.CSSProperties = {
+  marginTop: 10,
+  fontSize: 12,
+  color: "#f87171",
 };
