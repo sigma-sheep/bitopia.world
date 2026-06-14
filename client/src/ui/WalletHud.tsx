@@ -49,6 +49,9 @@ export function WalletHud({
   const [withdrawing, setWithdrawing] = useState(false);
   const [wNotice, setWNotice] = useState<string | null>(null);
   const [wError, setWError] = useState(false);
+  // A guest's wallet is destroyed on logout, so guests get an inline confirm
+  // before the button actually logs them out.
+  const [confirmingLogout, setConfirmingLogout] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -61,9 +64,20 @@ export function WalletHud({
   // Blink deposit. useBlinkDeposit freezes its config on first render, so the
   // signer can't close over the `token` prop (it expires). Instead it reads the
   // latest getAccessToken via a ref and fetches a fresh token at call time.
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken, logout, user } = usePrivy();
   const getTokenRef = useRef(getAccessToken);
   getTokenRef.current = getAccessToken;
+
+  // Once logged out, App's Gate sees authenticated=false and renders the login
+  // screen — no manual routing needed. Guests confirm first (see above).
+  const isGuest = user?.isGuest === true;
+  const onLogout = () => {
+    if (isGuest && !confirmingLogout) {
+      setConfirmingLogout(true);
+      return;
+    }
+    void logout();
+  };
 
   const { status, error, displayMessage, requestDeposit } = useBlinkDeposit({
     merchantId: MERCHANT_ID,
@@ -275,6 +289,26 @@ export function WalletHud({
             {withdrawing ? "Confirm in wallet…" : "Withdraw"}
           </button>
           {wNotice && <div style={wError ? errLine : noticeLine}>{wNotice}</div>}
+
+          {confirmingLogout ? (
+            <div style={logoutConfirm}>
+              <div style={{ fontSize: 12, color: "#9fb0c3" }}>
+                Logging out deletes this guest wallet and any funds in it. Log out anyway?
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button style={logoutDangerBtn} onClick={() => void logout()}>
+                  Log out
+                </button>
+                <button style={logoutCancelBtn} onClick={() => setConfirmingLogout(false)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button style={logoutBtn} onClick={onLogout}>
+              Log out
+            </button>
+          )}
         </div>
       )}
 
@@ -430,6 +464,44 @@ const withdrawBtnDisabled: React.CSSProperties = {
   ...withdrawBtn,
   opacity: 0.5,
   cursor: "default",
+};
+const logoutBtn: React.CSSProperties = {
+  marginTop: 16,
+  width: "100%",
+  padding: "8px 0",
+  fontSize: 13,
+  border: "none",
+  borderRadius: 8,
+  background: "transparent",
+  color: "#9fb0c3",
+  cursor: "pointer",
+};
+const logoutConfirm: React.CSSProperties = {
+  marginTop: 16,
+  padding: 12,
+  borderRadius: 8,
+  background: "#0c0f14",
+  border: "1px solid #2a3340",
+};
+const logoutDangerBtn: React.CSSProperties = {
+  flex: 1,
+  padding: "8px 0",
+  fontSize: 13,
+  border: "none",
+  borderRadius: 8,
+  background: "#b3261e",
+  color: "white",
+  cursor: "pointer",
+};
+const logoutCancelBtn: React.CSSProperties = {
+  flex: 1,
+  padding: "8px 0",
+  fontSize: 13,
+  border: "1px solid #2a3340",
+  borderRadius: 8,
+  background: "transparent",
+  color: "#e8eef6",
+  cursor: "pointer",
 };
 const errLine: React.CSSProperties = {
   marginTop: 10,
