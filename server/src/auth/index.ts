@@ -7,6 +7,8 @@ import { avatarSeedToColor } from "shared/avatar";
 import { getOrCreateUser, isUsernameTaken, setUsername, toSocketUser, type UserRow } from "./users";
 import { normalizeUsername, validateUsername } from "./username";
 import { verifyPrivyToken, getUserAddress } from "../chain/privy";
+import { publicClient } from "../chain/clients";
+import { readBalances } from "../chain/balances";
 import { ensConfigured, ensureUserSubname } from "../chain/ens";
 import { config } from "../config";
 import { fullName } from "../chain/ensName";
@@ -62,6 +64,13 @@ export function registerAuth(io: Server, app: Express, db: Database): void {
     res.json({ id: row.id, address: row.address, username: row.username, ensName: row.ens_name });
   });
 
+  // Current user's wallet balances (USDC + ETH) for the in-world wallet HUD.
+  app.get("/api/balances", async (req, res) => {
+    const row = await requireUser(req, res, db);
+    if (!row) return;
+    res.json(await readBalances(publicClient, row.address as `0x${string}`));
+  });
+
   // Live availability check for the onboarding input.
   app.get("/api/username-available", async (req, res) => {
     const name = normalizeUsername(String(req.query.name ?? ""));
@@ -98,13 +107,15 @@ export function registerAuth(io: Server, app: Express, db: Database): void {
       }
     } catch (e: any) {
       // Mint reverted (likely already owned on-chain) or RPC failure.
+      console.error(`[claim-username] ENS mint failed for "${name}" -> ${address}:`, e);
       return res.status(409).json({ error: "Could not register that name. Try another." });
     }
 
     try {
       setUsername(db, row.id, name, ensName);
-    } catch {
+    } catch (e) {
       // UNIQUE race: someone claimed it between the check and now.
+      console.error(`[claim-username] setUsername failed for "${name}":`, e);
       return res.status(409).json({ error: "That name was just taken." });
     }
 

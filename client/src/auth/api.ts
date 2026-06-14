@@ -20,6 +20,17 @@ export async function fetchMe(token: string): Promise<Me> {
   return res.json();
 }
 
+export interface Balances {
+  usdc: string;
+  eth: string;
+}
+
+export async function fetchBalances(token: string): Promise<Balances> {
+  const res = await fetch(`${API}/api/balances`, { headers: authHeaders(token) });
+  if (!res.ok) throw new Error(`balances failed: ${res.status}`);
+  return res.json();
+}
+
 export async function checkAvailable(name: string): Promise<{ available: boolean; error?: string }> {
   const res = await fetch(`${API}/api/username-available?name=${encodeURIComponent(name)}`);
   return res.json();

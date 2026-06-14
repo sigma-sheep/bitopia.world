@@ -54,12 +54,12 @@ export interface SubnameResult {
   txHash: string;
 }
 
-// Issues `<label>.bitopiaworld.eth` on Ethereum mainnet: mint the wrapped subname owned by
-// `owner`, point its addr record at `owner`, and set an avatar text record.
+// Issues `<label>.bitopiaworld.eth` on Ethereum mainnet: mint the wrapped subname,
+// point its addr record at `userAddress`, and set an avatar text record.
 // Throws if ENS isn't configured or the on-chain mint reverts (e.g. name taken).
 export async function ensureUserSubname(
   label: string,
-  owner: `0x${string}`,
+  userAddress: `0x${string}`,
   avatarColor: string
 ): Promise<SubnameResult> {
   if (!ensOwnerClient || !ensOwnerClient.account) {
@@ -70,13 +70,18 @@ export async function ensureUserSubname(
   const parentNode = namehash(parent);
   const node = namehash(name);
 
+  // The parent-owner wallet KEEPS ownership of the subname so it stays authorised
+  // to write the resolver records below. Handing ownership straight to the user
+  // here (as we did before) makes the subname exist but then reverts setAddr/setText
+  // with "not authorised" — only the node's current owner may set its records. The
+  // user is represented by the addr record, which resolves the name to their wallet.
   const txHash = await ensOwnerClient.writeContract({
     account: ensOwnerClient.account,
     chain: ensOwnerClient.chain,
     address: MAINNET_NAME_WRAPPER,
     abi: nameWrapperAbi,
     functionName: "setSubnodeRecord",
-    args: [parentNode, label.toLowerCase(), owner, MAINNET_PUBLIC_RESOLVER, 0n, 0, 0n],
+    args: [parentNode, label.toLowerCase(), ensOwnerClient.account.address, MAINNET_PUBLIC_RESOLVER, 0n, 0, 0n],
   });
   await publicClient.waitForTransactionReceipt({ hash: txHash });
 
@@ -86,7 +91,7 @@ export async function ensureUserSubname(
     address: MAINNET_PUBLIC_RESOLVER,
     abi: resolverAbi,
     functionName: "setAddr",
-    args: [node, owner],
+    args: [node, userAddress],
   });
   await ensOwnerClient.writeContract({
     account: ensOwnerClient.account,

@@ -3,6 +3,7 @@ import { usePrivy, useGuestAccounts } from "@privy-io/react-auth";
 import { AppPrivyProvider } from "./auth/PrivyProvider";
 import { fetchMe, type Me } from "./auth/api";
 import { UsernameGate } from "./ui/UsernameGate";
+import { WalletHud } from "./ui/WalletHud";
 import { WorldCanvas } from "./render/WorldCanvas";
 
 export default function App() {
@@ -50,7 +51,12 @@ function Gate() {
   if (me === null) return <Splash text="Couldn't reach the server. Retry shortly." />;
   if (!me.username) return <UsernameGate token={token} onClaimed={() => void loadMe()} />;
 
-  return <WorldCanvas token={token} />;
+  return (
+    <>
+      <WorldCanvas token={token} />
+      <WalletHud token={token} address={me.address} username={me.username} />
+    </>
+  );
 }
 
 function Login({ onLogin, onGuest }: { onLogin: () => void; onGuest: () => void }) {
