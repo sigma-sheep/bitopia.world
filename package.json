@@ -8,7 +8,12 @@
     "dev:server": "npm run dev -w server",
     "dev:client": "npm run dev -w client",
     "build:shared": "npm run build -w shared",
+    "build": "npm run build -w client",
+    "start": "tsx server/src/index.ts",
     "test": "npm run test -w shared && npm run test -w server"
+  },
+  "dependencies": {
+    "tsx": "^4.16.0"
   },
   "devDependencies": {
     "concurrently": "^9.0.0",

@@ -1,7 +1,9 @@
 // Thin client for the server's identity endpoints. The caller supplies the Privy
 // access token (from usePrivy().getAccessToken()).
 
-export const API = (import.meta.env as Record<string, string>).VITE_SOCKET_URL ?? "http://localhost:8787";
+// Empty/unset VITE_SOCKET_URL means "same origin" (single-service Railway deploy):
+// fetches hit relative /api/* paths. Local dev sets it to http://localhost:8787.
+export const API = (import.meta.env as Record<string, string>).VITE_SOCKET_URL || "";
 
 export interface Me {
   id: string;

@@ -1,4 +1,6 @@
 import http from "node:http";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import express from "express";
 import { Server } from "socket.io";
 import { config } from "./config";
@@ -22,6 +24,19 @@ registerAuth(io, app, db);
 // After registerAuth: reuses the CORS + express.json() middleware it installs.
 registerBlink(app);
 registerRoom(io);
+
+// Serve the built Vite client as static files so a single Railway service hosts
+// both the SPA and the API/socket. `start` runs from the repo root, so the build
+// output lives at <root>/client/dist; tolerate launch from server/ too. Skipped
+// in dev (no dist), where Vite serves the client on its own port.
+const clientDist = [resolve(process.cwd(), "client/dist"), resolve(process.cwd(), "../client/dist")].find(existsSync);
+if (clientDist) {
+  app.use(express.static(clientDist));
+  // SPA fallback: any non-API GET returns index.html so client routing works.
+  app.get(/^\/(?!api\/|health$|socket\.io\/).*/, (_req, res) => {
+    res.sendFile(resolve(clientDist, "index.html"));
+  });
+}
 
 server.listen(config.port, () => {
   console.log(`bitopia server listening on :${config.port}`);
