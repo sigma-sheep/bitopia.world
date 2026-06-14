@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSendTransaction } from "@privy-io/react-auth";
 import { fetchBalances } from "../auth/api";
+import { notifyBalanceChanged } from "../auth/balanceBus";
 import { withdrawError } from "./withdraw";
 import { transferUsdc } from "../chain/transfer";
 
@@ -84,6 +85,9 @@ export function PlayerMenu({
       setError(false);
       setNotice(`Sent — tx ${short(hash)}`);
       setAmount("");
+      // Tell the WalletHud (a sibling with its own state) our balance dropped, so
+      // its chip refreshes once the transfer settles instead of showing stale funds.
+      notifyBalanceChanged();
     } catch (e) {
       setError(true);
       setNotice(e instanceof Error ? e.message : "Transfer failed.");

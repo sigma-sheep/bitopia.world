@@ -3,6 +3,8 @@ import { usePrivy, useSendTransaction } from "@privy-io/react-auth";
 import { useBlinkDeposit } from "@swype-org/deposit/react";
 import type { SignerRequest, SignerResponse } from "@swype-org/deposit";
 import { fetchBalances, API, type Balances } from "../auth/api";
+import { onBalanceChanged, notifyBalanceChanged } from "../auth/balanceBus";
+import { scheduleSettleRefresh } from "../auth/settle";
 import { withdrawError } from "./withdraw";
 import { resolveDestination } from "../chain/resolve";
 import { CHAIN_ID, USDC } from "../chain/usdc";
@@ -95,11 +97,13 @@ export function WalletHud({
         address,
         token: USDC,
       });
-      await load(); // reflect the new balance once the deposit completes
+      // Funds land on-chain after the popup closes, so a single read here is
+      // stale — trigger the settlement burst (see below) to catch it.
+      notifyBalanceChanged();
     } catch {
       // A timeout/late settlement may still land — refresh so the balance
       // reflects it if it does. Messaging is handled by `notice` below.
-      void load();
+      notifyBalanceChanged();
     }
   };
 
@@ -139,7 +143,7 @@ export function WalletHud({
       setWNotice(`Sent — tx ${short(hash)}`);
       setWAmount("");
       setDest("");
-      await load(); // balance drops once mined; the open-panel poll also catches it
+      notifyBalanceChanged(); // balance drops once mined; the settle burst catches it
     } catch (e) {
       setWError(true);
       setWNotice(e instanceof Error ? e.message : "Withdrawal failed.");
@@ -162,6 +166,22 @@ export function WalletHud({
   // panel is open to keep idle network traffic down.
   useEffect(() => {
     void load();
+  }, [load]);
+
+  // Any balance-changing action (this HUD's deposit/withdraw, or a transfer from
+  // PlayerMenu) fires a settlement burst: the tx is only submitted, not mined, so
+  // we re-fetch a few times over ~30s until the new balance lands. This is what
+  // keeps the always-visible chip fresh even when the panel is closed.
+  useEffect(() => {
+    let cancel = () => {};
+    const off = onBalanceChanged(() => {
+      cancel();
+      cancel = scheduleSettleRefresh(() => void load());
+    });
+    return () => {
+      off();
+      cancel();
+    };
   }, [load]);
 
   useEffect(() => {
