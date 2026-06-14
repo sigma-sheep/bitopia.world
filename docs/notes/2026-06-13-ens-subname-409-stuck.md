@@ -65,6 +65,35 @@ is more fragile (expiry/fuse/balance pitfalls on the ERC-1155 transfer).
 Re-testing the **same** name works because no fuses were burned, so the parent
 wallet can reclaim the half-created subname and finish it.
 
+## Gotcha: "the name shows in the ENS Manager, so it worked" (it didn't)
+
+This is what made the bug confusing. The buggy first transaction
+(`setSubnodeRecord`) **does** land on-chain, so the subname appears in the ENS
+Manager app — but the flow still failed at `setAddr` (409). **A name appearing
+in the manager ≠ the app flow succeeded.** For these orphaned names:
+
+- `setSubnodeRecord` landed → name is listed ✅
+- `setAddr` reverted → **no addr record**, so the name does NOT resolve to the
+  user's wallet ❌
+- backend threw → **username never persisted** → 409 → retry loop
+
+### Reading the "Manager" badge
+
+- **Manager** = your *controller* role on the name (can set records), vs
+  **Owner** = holds the name/NFT.
+- **Blue "Manager"** = your *currently-connected* wallet manages it.
+  **Grey "Manager"** = the name's manager is a *different* address — likely a
+  different embedded wallet from another login session. The old buggy code set
+  `owner = the user's embedded wallet`, and that address can differ across
+  guest/email logins, which is why some attempts show blue and others grey.
+- Definitive check: click the name → compare its Owner/Manager addresses to your
+  connected wallet. (ENS's exact color rule wasn't verified; treat the above as
+  the working explanation.)
+
+**Leftover orphaned names from the buggy attempts:** `sheepbig`, `bigsheep`,
+`bigsheep1` (`*.bitopiaworld.eth`) — created but incomplete (no addr record).
+The fix reclaims + finishes them on retry since no fuses were burned.
+
 ## How to verify
 
 1. Server is on `tsx watch` (auto-reloads). Retry the username claim in the app.
