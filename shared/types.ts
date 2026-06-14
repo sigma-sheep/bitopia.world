@@ -56,7 +56,7 @@ export interface AgentConfig {
 export interface TxRecord {
   kind: "deposit" | "convert" | "createAgent" | "ensRegister" | "tip";
   hash: string;
-  url: string;           // Sepolia Etherscan link
+  url: string;           // Etherscan link
   label: string;         // human description, e.g. "Golden Flower tipped 1 $BTPA"
   ts: number;
 }

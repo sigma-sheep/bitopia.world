@@ -1,7 +1,7 @@
 // Thin client for the server's identity endpoints. The caller supplies the Privy
 // access token (from usePrivy().getAccessToken()).
 
-const API = (import.meta.env as Record<string, string>).VITE_SOCKET_URL ?? "http://localhost:8787";
+export const API = (import.meta.env as Record<string, string>).VITE_SOCKET_URL ?? "http://localhost:8787";
 
 export interface Me {
   id: string;
@@ -17,6 +17,17 @@ function authHeaders(token: string): HeadersInit {
 export async function fetchMe(token: string): Promise<Me> {
   const res = await fetch(`${API}/api/me`, { headers: authHeaders(token) });
   if (!res.ok) throw new Error(`me failed: ${res.status}`);
+  return res.json();
+}
+
+export interface Balances {
+  usdc: string;
+  eth: string;
+}
+
+export async function fetchBalances(token: string): Promise<Balances> {
+  const res = await fetch(`${API}/api/balances`, { headers: authHeaders(token) });
+  if (!res.ok) throw new Error(`balances failed: ${res.status}`);
   return res.json();
 }
 

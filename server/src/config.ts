@@ -9,11 +9,15 @@ dotenv.config({ path: [resolve(process.cwd(), ".env"), resolve(process.cwd(), ".
 export const config = {
   port: Number(process.env.PORT ?? 8787),
   dbPath: process.env.DB_PATH ?? "bitopia.sqlite",
-  mainnetRpcUrl: process.env.MAINNET_RPC_URL ?? process.env.RPC_URL ?? process.env.SEPOLIA_RPC_URL ?? "",
+  mainnetRpcUrl: process.env.MAINNET_RPC_URL ?? process.env.RPC_URL ?? "",
   deployerKey: process.env.DEPLOYER_PRIVATE_KEY ?? "",
   privyAppId: process.env.PRIVY_APP_ID ?? "",
   privyAppSecret: process.env.PRIVY_APP_SECRET ?? "",
   anthropicKey: process.env.ANTHROPIC_API_KEY ?? "",
   ensParentName: process.env.ENS_PARENT_NAME ?? "bitopiaworld.eth",
   ensParentOwnerKey: process.env.ENS_PARENT_OWNER_KEY ?? "",
+  blinkMerchantId: process.env.BLINK_MERCHANT_ID ?? "",
+  // PEM private key for signing Blink payloads. dotenv keeps literal "\n" when
+  // the value is double-quoted, so normalize them back to real newlines here.
+  blinkSignerKey: (process.env.BLINK_SIGNER_KEY ?? "").replace(/\\n/g, "\n"),
 };
