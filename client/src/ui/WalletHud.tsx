@@ -7,9 +7,21 @@ import { fetchBalances, API, type Balances } from "../auth/api";
 // Ethereum mainnet — this app funds USDC there (matches the server signer).
 const CHAIN_ID = 1;
 const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+
+const env = import.meta.env as Record<string, string>;
 // Optional perf hint that warms Blink's hosted flow; never trusted for auth.
-const MERCHANT_ID =
-  (import.meta.env as Record<string, string>).VITE_BLINK_MERCHANT_ID || undefined;
+const MERCHANT_ID = env.VITE_BLINK_MERCHANT_ID || undefined;
+// Which Blink environment the hosted flow targets. The signed payload's
+// merchantId must belong to the SAME environment (set BLINK_MERCHANT_ID to a
+// sandbox id when this is 'sandbox'). Sandbox merchants auto-approve.
+const BLINK_ENV: "sandbox" | "production" =
+  env.VITE_BLINK_ENV === "sandbox" ? "sandbox" : "production";
+const BLINK_DEBUG = env.VITE_BLINK_DEBUG === "true" || import.meta.env.DEV === true;
+// Backstop so a deposit that never settles (e.g. an unapproved merchant) rejects
+// with FLOW_TIMEOUT instead of spinning forever. Generous: settlement is
+// backend-side, so closing the popup never loses a real deposit — the balance
+// poll still catches a late completion.
+const FLOW_TIMEOUT_MS = 120_000;
 
 // Persistent in-world wallet surface: a small chip showing the player's USDC,
 // which expands into a panel with their address, balances, and a Blink
@@ -43,9 +55,12 @@ export function WalletHud({
   const getTokenRef = useRef(getAccessToken);
   getTokenRef.current = getAccessToken;
 
-  const { status, displayMessage, requestDeposit } = useBlinkDeposit({
+  const { status, error, displayMessage, requestDeposit } = useBlinkDeposit({
     merchantId: MERCHANT_ID,
+    environment: BLINK_ENV,
     enableFullWidget: false, // one-tap; no Deposit Options entry screen
+    flowTimeoutMs: FLOW_TIMEOUT_MS,
+    debug: BLINK_DEBUG,
     signer: async (data: SignerRequest): Promise<SignerResponse> => {
       const t = await getTokenRef.current();
       const res = await fetch(`${API}/api/sign-payment`, {
@@ -74,9 +89,21 @@ export function WalletHud({
       });
       await load(); // reflect the new balance once the deposit completes
     } catch {
-      // Errors (including user-dismissed) surface via `displayMessage` below.
+      // A timeout/late settlement may still land — refresh so the balance
+      // reflects it if it does. Messaging is handled by `notice` below.
+      void load();
     }
   };
+
+  // Translate the deposit error into a panel message. A user-dismissed popup is
+  // not an error; a timeout means "still settling," not "failed."
+  const dismissed = error?.code === "DEPOSIT_DISMISSED";
+  const timedOut = error?.code === "FLOW_TIMEOUT";
+  const notice = dismissed
+    ? null
+    : timedOut
+      ? "Still processing — your balance will update automatically if it completes."
+      : displayMessage;
 
   // Load once up front (so the chip shows a balance), then poll only while the
   // panel is open to keep idle network traffic down.
@@ -138,7 +165,7 @@ export function WalletHud({
           <button style={fundBtn} onClick={addFunds} disabled={depositing}>
             {depositing ? "Opening Blink…" : "Add funds"}
           </button>
-          {displayMessage && <div style={errLine}>{displayMessage}</div>}
+          {notice && <div style={timedOut ? noticeLine : errLine}>{notice}</div>}
         </div>
       )}
 
@@ -270,4 +297,9 @@ const errLine: React.CSSProperties = {
   marginTop: 10,
   fontSize: 12,
   color: "#f87171",
+};
+const noticeLine: React.CSSProperties = {
+  marginTop: 10,
+  fontSize: 12,
+  color: "#9fb0c3",
 };
