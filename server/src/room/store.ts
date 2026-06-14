@@ -17,6 +17,17 @@ export class RoomStore {
     return entity;
   }
 
+  // Apply a partial patch to an existing entity; returns the updated entity, or
+  // undefined if the id is unknown (so the caller can ignore stale/forged ids).
+  // Re-setting an existing key preserves insertion order, keeping list() stable.
+  update(id: string, patch: Partial<Entity>): Entity | undefined {
+    const entity = this.entities.get(id);
+    if (!entity) return undefined;
+    const next = { ...entity, ...patch };
+    this.entities.set(id, next);
+    return next;
+  }
+
   list(): Entity[] {
     return [...this.entities.values()];
   }

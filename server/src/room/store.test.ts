@@ -39,4 +39,24 @@ describe("RoomStore", () => {
   it("remove returns undefined for an unknown id", () => {
     expect(new RoomStore().remove("nope")).toBeUndefined();
   });
+
+  it("update patches an existing entity and returns it", () => {
+    const store = new RoomStore();
+    store.add(entity("a"));
+    const updated = store.update("a", { pos: { x: 5, y: 6 }, facing: "E" });
+    expect(updated).toMatchObject({ id: "a", pos: { x: 5, y: 6 }, facing: "E" });
+    expect(store.list()[0]).toMatchObject({ pos: { x: 5, y: 6 }, facing: "E" });
+  });
+
+  it("update preserves insertion order", () => {
+    const store = new RoomStore();
+    store.add(entity("a"));
+    store.add(entity("b"));
+    store.update("a", { facing: "N" });
+    expect(store.list().map((e) => e.id)).toEqual(["a", "b"]);
+  });
+
+  it("update returns undefined for an unknown id", () => {
+    expect(new RoomStore().update("nope", { facing: "N" })).toBeUndefined();
+  });
 });

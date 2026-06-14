@@ -2,7 +2,7 @@ import type { Server, Socket } from "socket.io";
 import type { ClientToServer, ServerToClient } from "shared/protocol";
 import type { Entity, Room, SocketUser } from "shared/types";
 import { RoomStore } from "./store";
-import { randomSpawn } from "./spawn";
+import { randomSpawn, clampToFloor } from "./spawn";
 
 type IO = Server<ClientToServer, ServerToClient>;
 type IOSocket = Socket<ClientToServer, ServerToClient>;
@@ -51,6 +51,17 @@ export function registerRoom(io: IO): void {
     // Existing occupants only get the newcomer (the newcomer already has it via
     // roomState, so `socket.to` — which excludes the sender — avoids a duplicate).
     socket.to(LOBBY.id).emit("entityJoined", { entity });
+
+    // Click-to-move: the client requests a destination; the server is
+    // authoritative. Clamp into the walkable inset, persist it, then broadcast to
+    // the WHOLE room (io.to, not socket.to) so the mover sees its own avatar glide
+    // too — that round-trip keeps every client's position in lockstep.
+    socket.on("move", ({ pos, facing }) => {
+      const target = clampToFloor(pos, LOBBY.width, LOBBY.height);
+      const updated = store.update(id, { pos: target, facing });
+      if (!updated) return; // unknown/forged id — ignore
+      io.to(LOBBY.id).emit("entityMoved", { id, pos: target, facing });
+    });
 
     socket.on("disconnect", () => {
       store.remove(id);
