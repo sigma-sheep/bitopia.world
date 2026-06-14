@@ -1,6 +1,7 @@
+import { randomUUID } from "node:crypto";
 import type { Server, Socket } from "socket.io";
 import type { ClientToServer, ServerToClient } from "shared/protocol";
-import type { Entity, Room, SocketUser } from "shared/types";
+import type { ChatMessage, Entity, Room, SocketUser } from "shared/types";
 import { RoomStore } from "./store";
 import { randomSpawn, clampToFloor } from "./spawn";
 
@@ -61,6 +62,22 @@ export function registerRoom(io: IO): void {
       const updated = store.update(id, { pos: target, facing });
       if (!updated) return; // unknown/forged id — ignore
       io.to(LOBBY.id).emit("entityMoved", { id, pos: target, facing });
+    });
+
+    // Chat: ephemeral, room-wide broadcast (io.to, not socket.to) so the sender
+    // sees its own bubble too. Trim and cap server-side; never trust client text.
+    socket.on("chat", ({ text }) => {
+      const trimmed = text.trim().slice(0, 280);
+      if (!trimmed) return;
+      const message: ChatMessage = {
+        id: randomUUID(),
+        roomId: LOBBY.id,
+        senderId: id,
+        senderName: displayNameFor(user),
+        text: trimmed,
+        ts: Date.now(),
+      };
+      io.to(LOBBY.id).emit("chat", { message });
     });
 
     socket.on("disconnect", () => {
