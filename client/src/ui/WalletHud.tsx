@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useSendTransaction } from "@privy-io/react-auth";
 import { useBlinkDeposit } from "@swype-org/deposit/react";
 import type { SignerRequest, SignerResponse } from "@swype-org/deposit";
+import { encodeFunctionData, erc20Abi, isAddress, parseUnits } from "viem";
 import { fetchBalances, API, type Balances } from "../auth/api";
 
 // Ethereum mainnet — this app funds USDC there (matches the server signer).
@@ -30,15 +31,23 @@ export function WalletHud({
   token,
   address,
   username,
+  ensName,
 }: {
   token: string;
   address: string;
   username: string;
+  ensName: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const [bal, setBal] = useState<Balances | null>(null);
   const [copied, setCopied] = useState(false);
   const [amount, setAmount] = useState("10");
+  // Withdraw form state, separate from the deposit "amount" above.
+  const [dest, setDest] = useState("");
+  const [wAmount, setWAmount] = useState("");
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [wNotice, setWNotice] = useState<string | null>(null);
+  const [wError, setWError] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -95,6 +104,63 @@ export function WalletHud({
     }
   };
 
+  // Withdraw: send USDC out of the user's embedded wallet to any address. The
+  // user confirms an ERC-20 transfer in a Privy modal; gas is sponsored so the
+  // wallet needs no ETH (requires gas sponsorship enabled for this app on
+  // mainnet — otherwise the send fails and we surface the error here).
+  const { sendTransaction } = useSendTransaction();
+
+  const balUsdc = Number(bal?.usdc);
+  const wAmt = Number(wAmount);
+  const wValid =
+    isAddress(dest) &&
+    Number.isFinite(wAmt) &&
+    wAmt > 0 &&
+    (!Number.isFinite(balUsdc) || wAmt <= balUsdc);
+
+  const withdraw = async () => {
+    setWNotice(null);
+    setWError(false);
+    if (!isAddress(dest)) {
+      setWError(true);
+      setWNotice("Enter a valid 0x address.");
+      return;
+    }
+    if (!Number.isFinite(wAmt) || wAmt <= 0) {
+      setWError(true);
+      setWNotice("Enter an amount greater than 0.");
+      return;
+    }
+    if (Number.isFinite(balUsdc) && wAmt > balUsdc) {
+      setWError(true);
+      setWNotice("Amount exceeds your USDC balance.");
+      return;
+    }
+
+    setWithdrawing(true);
+    try {
+      const data = encodeFunctionData({
+        abi: erc20Abi,
+        functionName: "transfer",
+        args: [dest as `0x${string}`, parseUnits(wAmount, 6)], // USDC has 6 decimals
+      });
+      const { hash } = await sendTransaction(
+        { to: USDC, data, chainId: CHAIN_ID },
+        { sponsor: true },
+      );
+      setWError(false);
+      setWNotice(`Sent — tx ${short(hash)}`);
+      setWAmount("");
+      setDest("");
+      await load(); // balance drops once mined; the open-panel poll also catches it
+    } catch (e) {
+      setWError(true);
+      setWNotice(e instanceof Error ? e.message : "Withdrawal failed.");
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
   // Translate the deposit error into a panel message. A user-dismissed popup is
   // not an error; a timeout means "still settling," not "failed."
   const dismissed = error?.code === "DEPOSIT_DISMISSED";
@@ -118,8 +184,11 @@ export function WalletHud({
     return () => clearInterval(id);
   }, [open, load]);
 
+  // Prefer the ENS subdomain (e.g. alice.bitopiaworld.eth) over the raw hex; it
+  // resolves to the same address, so it's also valid to copy and send to.
+  const walletLabel = ensName ?? short(address);
   const copy = async () => {
-    await navigator.clipboard.writeText(address);
+    await navigator.clipboard.writeText(ensName ?? address);
     setCopied(true);
     setTimeout(() => setCopied(false), 1200);
   };
@@ -139,8 +208,8 @@ export function WalletHud({
           </div>
 
           <div style={{ marginTop: 12, fontSize: 12, opacity: 0.6 }}>Wallet</div>
-          <button onClick={copy} style={addrRow} title="Copy address">
-            <span style={{ fontFamily: "monospace" }}>{short(address)}</span>
+          <button onClick={copy} style={addrRow} title={ensName ? "Copy ENS name" : "Copy address"}>
+            <span style={{ fontFamily: "monospace" }}>{walletLabel}</span>
             <span style={{ fontSize: 12, opacity: 0.7 }}>{copied ? "Copied" : "Copy"}</span>
           </button>
 
@@ -166,6 +235,35 @@ export function WalletHud({
             {depositing ? "Opening Blink…" : "Add funds"}
           </button>
           {notice && <div style={timedOut ? noticeLine : errLine}>{notice}</div>}
+
+          <div style={{ marginTop: 16, fontSize: 12, opacity: 0.6 }}>Withdraw USDC</div>
+          <input
+            type="text"
+            value={dest}
+            onChange={(e) => setDest(e.target.value)}
+            placeholder="0x… destination address"
+            style={destInput}
+            spellCheck={false}
+            aria-label="Destination address"
+          />
+          <div style={fundRow}>
+            <span style={{ opacity: 0.6 }}>$</span>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              inputMode="decimal"
+              value={wAmount}
+              onChange={(e) => setWAmount(e.target.value)}
+              placeholder="0.00"
+              style={amountInput}
+              aria-label="Withdraw amount in USDC"
+            />
+          </div>
+          <button style={withdrawBtn} onClick={withdraw} disabled={withdrawing || !wValid}>
+            {withdrawing ? "Confirm in wallet…" : "Withdraw"}
+          </button>
+          {wNotice && <div style={wError ? errLine : noticeLine}>{wNotice}</div>}
         </div>
       )}
 
@@ -291,6 +389,30 @@ const fundBtn: React.CSSProperties = {
   borderRadius: 8,
   background: "#3b82f6",
   color: "white",
+  cursor: "pointer",
+};
+const destInput: React.CSSProperties = {
+  width: "100%",
+  marginTop: 8,
+  padding: "8px 10px",
+  borderRadius: 8,
+  background: "#0c0f14",
+  border: "1px solid #2a3340",
+  outline: "none",
+  color: "#e8eef6",
+  fontSize: 13,
+  fontFamily: "monospace",
+  boxSizing: "border-box",
+};
+const withdrawBtn: React.CSSProperties = {
+  marginTop: 10,
+  width: "100%",
+  padding: "10px 0",
+  fontSize: 14,
+  border: "1px solid #2a3340",
+  borderRadius: 8,
+  background: "#0c0f14",
+  color: "#e8eef6",
   cursor: "pointer",
 };
 const errLine: React.CSSProperties = {

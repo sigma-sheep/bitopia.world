@@ -54,7 +54,12 @@ function Gate() {
   return (
     <>
       <WorldCanvas token={token} />
-      <WalletHud token={token} address={me.address} username={me.username} />
+      <WalletHud
+        token={token}
+        address={me.address}
+        username={me.username}
+        ensName={me.ensName}
+      />
     </>
   );
 }
