@@ -3,8 +3,9 @@ import http from "node:http";
 import { AddressInfo } from "node:net";
 import { Server } from "socket.io";
 import { io as ioc, type Socket as ClientSocket } from "socket.io-client";
+import { randomUUID } from "node:crypto";
 import type { ServerToClient } from "shared/protocol";
-import type { Entity } from "shared/types";
+import type { Entity, SocketUser } from "shared/types";
 import { registerRoom } from "./handlers";
 
 // Boots a real in-process server on an ephemeral port so the presence flow is
@@ -17,6 +18,20 @@ const clients: ClientSocket[] = [];
 beforeEach(async () => {
   server = http.createServer();
   io = new Server(server);
+  // Stub the auth middleware the real server installs: derive a SocketUser from
+  // the handshake so the presence flow can be tested without Privy.
+  io.use((socket, next) => {
+    const a = socket.handshake.auth as { uid?: string; address?: string };
+    const id = a.uid ?? randomUUID();
+    const address = a.address ?? `0x${id.replace(/-/g, "").slice(0, 40)}`;
+    (socket.data as { user: SocketUser }).user = {
+      id,
+      address,
+      avatarSeed: address,
+      roomId: "lobby",
+    };
+    next();
+  });
   registerRoom(io);
   await new Promise<void>((r) => server.listen(0, r));
   url = `http://localhost:${(server.address() as AddressInfo).port}`;
@@ -30,7 +45,8 @@ afterEach(async () => {
 });
 
 function connect() {
-  const c: ClientSocket = ioc(url, { auth: {}, reconnection: false });
+  // Each client gets a distinct identity, mirroring distinct Privy users.
+  const c: ClientSocket = ioc(url, { auth: { uid: randomUUID() }, reconnection: false });
   clients.push(c);
   return c;
 }
