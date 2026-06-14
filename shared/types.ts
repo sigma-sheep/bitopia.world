@@ -11,6 +11,7 @@ export interface Entity {
   displayName: string;   // ENS name if set, else short address
   ensName?: string;
   avatarSeed: string;    // deterministic avatar source (usually the address)
+  address: string;       // wallet address — lets others send funds to this entity
 }
 
 export interface Room {

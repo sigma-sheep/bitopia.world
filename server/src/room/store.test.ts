@@ -11,6 +11,7 @@ function entity(id: string): Entity {
     facing: "S",
     displayName: id,
     avatarSeed: id,
+    address: id,
   };
 }
 

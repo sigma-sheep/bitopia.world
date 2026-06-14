@@ -4,6 +4,7 @@ import { AppPrivyProvider } from "./auth/PrivyProvider";
 import { fetchMe, type Me } from "./auth/api";
 import { UsernameGate } from "./ui/UsernameGate";
 import { WalletHud } from "./ui/WalletHud";
+import { PlayerMenu, type TransferTarget } from "./ui/PlayerMenu";
 import { WorldCanvas } from "./render/WorldCanvas";
 
 export default function App() {
@@ -20,6 +21,8 @@ function Gate() {
   const { createGuestAccount } = useGuestAccounts();
   const [token, setToken] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null | undefined>(undefined); // undefined = loading
+  // The player whose avatar was clicked, if any — drives the transfer menu.
+  const [target, setTarget] = useState<TransferTarget | null>(null);
 
   const loadMe = useCallback(async () => {
     const t = await getAccessToken();
@@ -53,13 +56,16 @@ function Gate() {
 
   return (
     <>
-      <WorldCanvas token={token} />
+      <WorldCanvas token={token} onAvatarSelect={setTarget} />
       <WalletHud
         token={token}
         address={me.address}
         username={me.username}
         ensName={me.ensName}
       />
+      {target && (
+        <PlayerMenu target={target} token={token} onClose={() => setTarget(null)} />
+      )}
     </>
   );
 }

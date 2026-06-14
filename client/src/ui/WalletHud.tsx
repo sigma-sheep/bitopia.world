@@ -2,14 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePrivy, useSendTransaction } from "@privy-io/react-auth";
 import { useBlinkDeposit } from "@swype-org/deposit/react";
 import type { SignerRequest, SignerResponse } from "@swype-org/deposit";
-import { encodeFunctionData, erc20Abi, parseUnits } from "viem";
 import { fetchBalances, API, type Balances } from "../auth/api";
 import { withdrawError } from "./withdraw";
 import { resolveDestination } from "../chain/resolve";
-
-// Ethereum mainnet — this app funds USDC there (matches the server signer).
-const CHAIN_ID = 1;
-const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+import { CHAIN_ID, USDC } from "../chain/usdc";
+import { transferUsdc } from "../chain/transfer";
 
 const env = import.meta.env as Record<string, string>;
 // Optional perf hint that warms Blink's hosted flow; never trusted for auth.
@@ -137,15 +134,7 @@ export function WalletHud({
         setWNotice("Couldn't resolve that ENS name.");
         return;
       }
-      const data = encodeFunctionData({
-        abi: erc20Abi,
-        functionName: "transfer",
-        args: [to, parseUnits(wAmount, 6)], // USDC has 6 decimals
-      });
-      const { hash } = await sendTransaction(
-        { to: USDC, data, chainId: CHAIN_ID },
-        { sponsor: true },
-      );
+      const hash = await transferUsdc(sendTransaction, to, wAmount);
       setWError(false);
       setWNotice(`Sent — tx ${short(hash)}`);
       setWAmount("");

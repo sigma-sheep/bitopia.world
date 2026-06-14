@@ -9,6 +9,7 @@ import { Character } from "./Character";
 import { makeIsoCamera, resizeIsoCamera } from "./isoCamera";
 import { connectRoom } from "../net/room";
 import { ChatInput } from "../ui/ChatInput";
+import type { TransferTarget } from "../ui/PlayerMenu";
 
 // Dominant-axis facing from one ground point to another. +X → E, +Z → S, to
 // match Vec2.y → world Z and the iso camera looking from the +X/+Z corner.
@@ -27,10 +28,22 @@ const BUBBLE_MS = 5000;
 // Extra height above the head so the bubble clears the nameplate sprite.
 const BUBBLE_WORLD_OFFSET = Character.SIZE.h / 2 + 1.6;
 
-export function WorldCanvas({ token }: { token?: string }) {
+export function WorldCanvas({
+  token,
+  onAvatarSelect,
+}: {
+  token?: string;
+  // Clicking another player's avatar opens a context menu in React; the canvas
+  // reports who was clicked and where (viewport pixels for the menu anchor).
+  onAvatarSelect?: (target: TransferTarget) => void;
+}) {
   const mountRef = useRef<HTMLDivElement>(null);
   // Lets the React-rendered ChatInput reach the imperative socket send.
   const sendChatRef = useRef<((text: string) => void) | null>(null);
+  // Latest onAvatarSelect, read via ref so the imperative click handler isn't
+  // re-bound when the parent re-renders (the effect only depends on token).
+  const onAvatarSelectRef = useRef(onAvatarSelect);
+  onAvatarSelectRef.current = onAvatarSelect;
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -62,12 +75,18 @@ export function WorldCanvas({ token }: { token?: string }) {
     // One Character per server Entity, keyed by id. The server owns identity,
     // color (from avatarSeed) and spawn, so every client renders the same world.
     const characters = new Map<string, Character>();
+    // Per-entity data the menu needs (who to pay), keyed by id. The Character
+    // only knows render state, so the address/name live here alongside it.
+    const meta = new Map<string, { displayName: string; address: string; ensName: string | null }>();
     const addEntity = (e: Entity) => {
       if (characters.has(e.id)) return;
       const character = new Character(e.id, avatarSeedToColor(e.avatarSeed), e.pos, e.displayName);
       character.setResolution(width, height);
+      // Tag the mesh so a raycast hit can be traced back to its entity id.
+      character.mesh.userData.entityId = e.id;
       scene.add(character.mesh);
       characters.set(e.id, character);
+      meta.set(e.id, { displayName: e.displayName, address: e.address, ensName: e.ensName ?? null });
     };
     // Speech bubbles live in a DOM layer over the canvas (crisp text, easy
     // styling), positioned imperatively each frame in the render loop. One bubble
@@ -94,6 +113,7 @@ export function WorldCanvas({ token }: { token?: string }) {
       if (!character) return;
       scene.remove(character.mesh);
       characters.delete(id);
+      meta.delete(id);
       removeBubble(id);
     };
 
@@ -157,6 +177,35 @@ export function WorldCanvas({ token }: { token?: string }) {
       pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
       pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(pointer, camera);
+
+      // Avatar first: a click on another player opens the transfer menu instead
+      // of moving. Recurse into children (the box has border/nameplate kids), then
+      // walk up to the tagged mesh to recover the entity id.
+      const avatarHits = raycaster.intersectObjects(
+        [...characters.values()].map((c) => c.mesh),
+        true,
+      );
+      if (avatarHits.length > 0) {
+        let o: THREE.Object3D | null = avatarHits[0].object;
+        while (o && o.userData.entityId === undefined) o = o.parent;
+        const hitId = o?.userData.entityId as string | undefined;
+        if (hitId) {
+          if (hitId === selfId) return; // clicking yourself does nothing
+          const m = meta.get(hitId);
+          if (m) {
+            onAvatarSelectRef.current?.({
+              id: hitId,
+              displayName: m.displayName,
+              address: m.address,
+              ensName: m.ensName,
+              x: ev.clientX,
+              y: ev.clientY,
+            });
+            return; // don't also move
+          }
+        }
+      }
+
       if (!raycaster.ray.intersectPlane(floorPlane, hit)) return; // ray parallel
 
       const from = self.mesh.position;

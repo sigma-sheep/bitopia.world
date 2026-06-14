@@ -41,6 +41,7 @@ export function registerRoom(io: IO): void {
       displayName: displayNameFor(user),
       ensName: user.ensName,
       avatarSeed: user.avatarSeed,
+      address: user.address,
     };
 
     socket.join(LOBBY.id);
