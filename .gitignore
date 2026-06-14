@@ -3,6 +3,8 @@ dist
 .vite
 .env
 *.local
+secrets/
+*.pem
 .DS_Store
 contracts/cache
 contracts/artifacts
