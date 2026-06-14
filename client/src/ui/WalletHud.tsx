@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePrivy, useSendTransaction } from "@privy-io/react-auth";
 import { useBlinkDeposit } from "@swype-org/deposit/react";
 import type { SignerRequest, SignerResponse } from "@swype-org/deposit";
-import { encodeFunctionData, erc20Abi, isAddress, parseUnits } from "viem";
+import { encodeFunctionData, erc20Abi, parseUnits } from "viem";
 import { fetchBalances, API, type Balances } from "../auth/api";
+import { withdrawError } from "./withdraw";
+import { resolveDestination } from "../chain/resolve";
 
 // Ethereum mainnet — this app funds USDC there (matches the server signer).
 const CHAIN_ID = 1;
@@ -111,38 +113,34 @@ export function WalletHud({
   const { sendTransaction } = useSendTransaction();
 
   const balUsdc = Number(bal?.usdc);
-  const wAmt = Number(wAmount);
-  const wValid =
-    isAddress(dest) &&
-    Number.isFinite(wAmt) &&
-    wAmt > 0 &&
-    (!Number.isFinite(balUsdc) || wAmt <= balUsdc);
 
   const withdraw = async () => {
     setWNotice(null);
     setWError(false);
-    if (!isAddress(dest)) {
+    // Validate on click (not via a disabled button) so the reason an entry is
+    // rejected is actually shown — a disabled button gave no feedback and looked
+    // identical to an active one, so it just appeared to "do nothing".
+    const invalid = withdrawError(dest, wAmount, balUsdc);
+    if (invalid) {
       setWError(true);
-      setWNotice("Enter a valid 0x address.");
-      return;
-    }
-    if (!Number.isFinite(wAmt) || wAmt <= 0) {
-      setWError(true);
-      setWNotice("Enter an amount greater than 0.");
-      return;
-    }
-    if (Number.isFinite(balUsdc) && wAmt > balUsdc) {
-      setWError(true);
-      setWNotice("Amount exceeds your USDC balance.");
+      setWNotice(invalid);
       return;
     }
 
     setWithdrawing(true);
     try {
+      // Accept either a 0x address or an ENS name (e.g. alice.bitopiaworld.eth);
+      // resolve the name to an address on mainnet before sending.
+      const to = await resolveDestination(dest);
+      if (!to) {
+        setWError(true);
+        setWNotice("Couldn't resolve that ENS name.");
+        return;
+      }
       const data = encodeFunctionData({
         abi: erc20Abi,
         functionName: "transfer",
-        args: [dest as `0x${string}`, parseUnits(wAmount, 6)], // USDC has 6 decimals
+        args: [to, parseUnits(wAmount, 6)], // USDC has 6 decimals
       });
       const { hash } = await sendTransaction(
         { to: USDC, data, chainId: CHAIN_ID },
@@ -241,7 +239,7 @@ export function WalletHud({
             type="text"
             value={dest}
             onChange={(e) => setDest(e.target.value)}
-            placeholder="0x… destination address"
+            placeholder="0x address or ENS name"
             style={destInput}
             spellCheck={false}
             aria-label="Destination address"
@@ -260,7 +258,11 @@ export function WalletHud({
               aria-label="Withdraw amount in USDC"
             />
           </div>
-          <button style={withdrawBtn} onClick={withdraw} disabled={withdrawing || !wValid}>
+          <button
+            style={withdrawing ? withdrawBtnDisabled : withdrawBtn}
+            onClick={withdraw}
+            disabled={withdrawing}
+          >
             {withdrawing ? "Confirm in wallet…" : "Withdraw"}
           </button>
           {wNotice && <div style={wError ? errLine : noticeLine}>{wNotice}</div>}
@@ -414,6 +416,11 @@ const withdrawBtn: React.CSSProperties = {
   background: "#0c0f14",
   color: "#e8eef6",
   cursor: "pointer",
+};
+const withdrawBtnDisabled: React.CSSProperties = {
+  ...withdrawBtn,
+  opacity: 0.5,
+  cursor: "default",
 };
 const errLine: React.CSSProperties = {
   marginTop: 10,
